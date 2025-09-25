@@ -269,6 +269,67 @@ else
   exit 3
 fi
 
+# Install TigerVNC (viewer/server tools) if missing. Useful for local integration tests
+install_tigervnc() {
+  # Quick check for common vnc binaries
+  if command -v Xtigervnc >/dev/null 2>&1 || command -v Xvnc >/dev/null 2>&1 || command -v vncserver >/dev/null 2>&1; then
+    success "TigerVNC (or compatible VNC server) already present: $(command -v Xtigervnc || command -v Xvnc || command -v vncserver)"
+    return 0
+  fi
+  warn "TigerVNC not found   attempting to install via $PKG_MGR (best-effort)."
+  case "$PKG_MGR" in
+    apt)
+      info "Installing TigerVNC packages via apt..."
+      sudo apt-get update || true
+      sudo apt-get install -y tigervnc-standalone-server tigervnc-common tigervnc-tools || true
+      ;;
+    dnf)
+      info "Installing TigerVNC via dnf..."
+      sudo dnf install -y tigervnc-server tigervnc || true
+      ;;
+    yum)
+      info "Installing TigerVNC via yum..."
+      sudo yum install -y tigervnc-server tigervnc || true
+      ;;
+    pacman)
+      info "Installing TigerVNC via pacman..."
+      sudo pacman -Sy --noconfirm tigervnc || true
+      ;;
+    apk)
+      info "Installing TigerVNC via apk..."
+      sudo apk add tigervnc || true
+      ;;
+    brew)
+      info "Installing TigerVNC via Homebrew..."
+      brew install tigervnc || true
+      ;;
+    choco)
+      info "Installing TigerVNC via Chocolatey..."
+      choco install tigervnc -y || true
+      ;;
+    *)
+      warn "No supported package manager detected for installing TigerVNC. Please install tigervnc manually."
+      return 1
+      ;;
+  esac
+
+  sleep 1
+  if command -v Xtigervnc >/dev/null 2>&1 || command -v Xvnc >/dev/null 2>&1 || command -v vncserver >/dev/null 2>&1; then
+    success "TigerVNC installed: $(command -v Xtigervnc || command -v Xvnc || command -v vncserver)"
+    return 0
+  else
+    warn "TigerVNC installation finished but no vncserver binary found in PATH."
+    return 2
+  fi
+}
+
+info "==> Ensuring TigerVNC is installed (optional for local tests)"
+if install_tigervnc; then
+  success "TigerVNC available"
+else
+  warn "TigerVNC not available after attempted install; some local tests or helpers may not run as expected."
+fi
+
 if [ "$NEED_RUN" -eq 1 ]; then
   info "Running: make all"
   make all

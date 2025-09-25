@@ -8,9 +8,19 @@ This repository packages a compact Debian 12 desktop (XFCE) inside a Docker imag
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 ---
+## Assumptions / Prerequisites
+
+This project assumes you have a running Linux desktop environment (any distribution) and that you're testing or demoing a GUI inside Docker. The primary use cases are local development, quick demos, and CI-friendly GUI tests on a Linux host.
+
+- Host requirements: Docker and GNU Make (the included `install.sh` can attempt to install them on many distributions but typically requires `sudo`).
+- A VNC viewer on the client machine to connect to the container (e.g. TigerVNC viewer, Remmina, or any VNC client).
+- The repository binds the VNC server to localhost by default; this is intended for local testing. If you run on a remote host, secure the VNC connection (set `VNC_PASSWORD`, use SSH tunnel, or VPN).
+
+---
+
 ## Quick start (install Docker + make, then build)
 
-1) If you don't already have Docker and GNU Make, use the bundled helper. It will try to detect and install what's missing:
+1) If you don't already have Docker and GNU Make, use the bundled helper. It will try to detect and install what's missing (Docker, GNU Make, and optionally TigerVNC for local VNC testing):
 
 ```sh
 ./install.sh        # detects/installs Docker and GNU Make when possible
@@ -54,7 +64,7 @@ Notes:
 
 - `Dockerfile` — builds the Debian + XFCE image used by `make build`.
 - `Makefile` — convenient targets (build, start, stop, status, connect, itest, clean-logs, etc.).
-- `install.sh` — helper that detects and attempts to install Docker and GNU Make when missing. It prints colored, emoji-enhanced status messages when run in a terminal; set `NO_COLOR=1` to disable color/emoji output.
+- `install.sh` — helper that detects and attempts to install Docker and GNU Make when missing. It also attempts to install TigerVNC (server/viewer) packages when a VNC client/server is not present, which is useful for local integration tests. The script prints colored, emoji-enhanced status messages when run in a terminal; set `NO_COLOR=1` to disable color/emoji output.
 - `container/` — runtime files copied into the image and host helpers:
   - `entrypoint.sh` — image entrypoint that starts supervisord and services
   - `vnc-start.sh` — prepares VNC password and launches the VNC server
