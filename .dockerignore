@@ -1,0 +1,19 @@
+# Exclude VCS and editor files from build context
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Node modules and debug logs
+node_modules
+npm-debug.log
+yarn.lock
+
+# Local environment and runtime artifacts
+.env
+debian12-xfce:1.log
+vnc-start.sh.running
+
+# Don't include CI or local scripts
+*.local

@@ -1,0 +1,116 @@
+name: desktop-dockerfile-generator
+version: "1.1"
+description: |
+  Prompt template for an LLM to generate a Dockerfile that builds a Linux image
+  with a desktop environment and remote access (VNC/RDP/Xpra).
+
+variables:
+  BASE_IMAGE: "e.g. debian:12, ubuntu:24.04, fedora:40"
+  BASE_IMAGE_TYPE: "deb or rpm"
+  DE: "desktop environment, e.g. xfce, lxde, mate, kde, gnome"
+  WM: "optional window manager, e.g. openbox, kwin"
+  DISPLAY_METHOD: "tigervnc | xrdp | xpra | x11-forward | wayland"
+  EXTRA_PACKAGES: "comma-separated list of extra packages to install"
+  USER_NAME: "non-root username to create in the image"
+  USER_UID: "numeric uid"
+  USER_GID: "numeric gid"
+  LOCALE: "e.g. en_US.UTF-8"
+  TIMEZONE: "e.g. Europe/Berlin"
+  EXPOSE_PORTS: "comma-separated ports, e.g. 5901,3389"
+  SIZE_TARGET: "small|balanced|full"
+  USE_SYSTEMD: "yes|no"
+  AUDIO: "none|pulseaudio|pipewire"
+  GPU_SUPPORT: "none|nvidia|intel"
+  HEALTHCHECK_CMD: "optional shell command string or empty"
+  ENTRYPOINT_SCRIPT: "optional path for an entrypoint script"
+  DEFAULT_PASSWORD: "optional default password for the created user (use only for testing)"
+  HOSTNAME: "optional container hostname (e.g., dev-desktop)"
+  INCLUDE_BRAVE: "yes|no  # whether to install brave-browser in the bootstrap script"
+
+prompt_template: |-
+  You are a Dockerfile author. Produce a single, ready-to-build Dockerfile (and any small support scripts or config files if needed) that builds a container image running a full desktop environment with remote-access capability according to the variables below. Output only the files with clear separators and file names (for example: "### FILE: Dockerfile" then the file contents; if you produce extra files, follow the same naming convention). Do not include any additional explanation after the files.
+
+  Required parameters (fill before sending):
+  - BASE_IMAGE: {{BASE_IMAGE}}
+  - BASE_IMAGE_TYPE: {{BASE_IMAGE_TYPE}}  # either "deb" or "rpm"
+  - DE: {{DE}}
+  - WM: {{WM}}  # optional
+  - DISPLAY_METHOD: {{DISPLAY_METHOD}}  # one of tigervnc, xrdp, xpra, x11-forward, wayland
+  - EXTRA_PACKAGES: {{EXTRA_PACKAGES}}  # comma-separated list
+  - USER_NAME: {{USER_NAME}}
+  - USER_UID: {{USER_UID}}
+  - USER_GID: {{USER_GID}}
+  - LOCALE: {{LOCALE}}
+  - TIMEZONE: {{TIMEZONE}}
+  - EXPOSE_PORTS: {{EXPOSE_PORTS}}  # comma-separated
+  - SIZE_TARGET: {{SIZE_TARGET}}  # small|balanced|full
+  - USE_SYSTEMD: {{USE_SYSTEMD}}  # "no" recommended
+  - AUDIO: {{AUDIO}}  # none|pulseaudio|pipewire
+  - GPU_SUPPORT: {{GPU_SUPPORT}}  # none|nvidia|intel
+  - HEALTHCHECK_CMD: {{HEALTHCHECK_CMD}}  # optional shell command string or empty
+  - ENTRYPOINT_SCRIPT: {{ENTRYPOINT_SCRIPT}}  # optional path if you want an entrypoint
+  - DEFAULT_PASSWORD: {{DEFAULT_PASSWORD}}  # optional default password for the created user (use only for testing)
+  - HOSTNAME: {{HOSTNAME}}  # optional container hostname (e.g., dev-desktop)
+  - DEFAULT_PASSWORD: {{DEFAULT_PASSWORD}}  # optional default password for the created user (use only for testing)
+  - INCLUDE_BRAVE: {{INCLUDE_BRAVE}}  # yes|no - whether to install brave-browser in bootstrap
+
+  Instructions for generator:
+  1. Use the appropriate package manager (apt / dnf / yum / zypper) consistent with BASE_IMAGE_TYPE.
+  2. Minimize layers and image size: combine apt-get update && apt-get install && apt-get clean in single RUN commands and remove apt caches.
+  3. Create a non-root user with USER_NAME/UID/GID and set HOME.
+  4. Install the chosen desktop environment (DE) and a small set of recommended utilities consistent with SIZE_TARGET.
+  5. Configure remote access:
+     - For tigervnc: install tigervnc-standalone-server + create a startup script to launch the DE session for the user; expose the VNC port(s).
+     - For xrdp: install xrdp + configure a DBUS/Xsession wrapper to start the DE.
+     - For xpra: create xpra session example.
+     - For x11-forward: prepare environment variables and an example of how to run (no VNC server).
+     - For wayland: include a note that Wayland in containers is experimental and include an example using XWayland or xpra as fallback.
+  6. Include default entrypoint script that starts necessary services (VNC/RDP) and drops into a supervisord or simple script; avoid systemd unless USE_SYSTEMD is "yes". If systemd is requested, add explicit note to the user about required privileged runtime and systemd-enabled base images.
+  7. Provide basic security guidance inside the Dockerfile (set a VNC password file owned by the user, avoid running services as root).
+  8. Add EXPOSE for ports and optional HEALTHCHECK.
+  9. Ensure locale and timezone are set and files created as needed.
+  10. If GPU_SUPPORT is requested, add comments and ENV placeholders and do not install host drivers; instruct user about --gpus flag or runtime requirements.
+  11. Keep the final image runnable with one docker run command. Provide minimal environment variables required (DISPLAY, PULSE_SERVER, etc.) settable at runtime.
+  12. Add small comments in the generated files describing how to build and run, and any minimal runtime flags required (volume mounts for X11 socket or PulseAudio, --device, --gpus, or --cap-add=SYS_ADMIN if needed). Do not print any other messages.
+
+  13. If DEFAULT_PASSWORD is provided, set the user's password at build time using a secure method (prefer build-time secrets) and `chpasswd`, and include a clear security warning to change the password on first login. Avoid committing plaintext passwords into source control or the image.
+
+  14. If HOSTNAME is provided, include `ENV HOSTNAME={{HOSTNAME}}` in the generated Dockerfile and a short note that users can override the hostname at runtime with `--hostname` on `docker run`.
+
+  15. If INCLUDE_BRAVE is set to "yes", the generator must include steps in the bootstrap script to idempotently add the Brave APT repository (or equivalent for the chosen distro), add the key, and install `brave-browser` using the distro package manager. The bootstrap should check package manager availability and perform installs with appropriate privilege escalation.
+
+  Edge-case handling: if DE is "gnome" or SIZE_TARGET is "small" produce a warning comment in the Dockerfile recommending "balanced" or "full" for GNOME; if WAYLAND requested, include fallback to Xorg or xpra.
+
+  Output format: produce files only with markers:
+  ### FILE: Dockerfile
+  <content>
+  ### FILE: /path/to/entrypoint.sh
+  <content>
+  ...end.
+
+output_format:
+  file_marker: '### FILE: <path>'
+  notes: 'Generator should only output file markers and file contents, no extra commentary.'
+
+example_filled:
+  BASE_IMAGE: debian:12-slim
+  BASE_IMAGE_TYPE: deb
+  DE: xfce
+  WM: ""
+  DISPLAY_METHOD: tigervnc
+  EXTRA_PACKAGES: firefox-esr,thunar,xfce4-terminal
+  USER_NAME: devuser
+  USER_UID: 1000
+  USER_GID: 1000
+  LOCALE: en_US.UTF-8
+  TIMEZONE: Etc/UTC
+  EXPOSE_PORTS: "5901"
+  SIZE_TARGET: balanced
+  USE_SYSTEMD: no
+  AUDIO: pulseaudio
+  GPU_SUPPORT: none
+  HEALTHCHECK_CMD: 'pgrep Xvnc || exit 1'
+  ENTRYPOINT_SCRIPT: /usr/local/bin/entrypoint.sh
+  DEFAULT_PASSWORD: ""
+  HOSTNAME: dev-desktop
+  INCLUDE_BRAVE: no

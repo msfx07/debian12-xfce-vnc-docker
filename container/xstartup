@@ -1,0 +1,6 @@
+#!/bin/sh
+# xstartup for tigervnc: start a DBUS session and the XFCE desktop
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XKL_XMODMAP_DISABLE=1
+exec dbus-launch --exit-with-session startxfce4

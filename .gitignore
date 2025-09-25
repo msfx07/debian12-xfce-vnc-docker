@@ -1,0 +1,36 @@
+# Runtime artifacts
+*.log
+*.pid
+*.sock
+*.running
+
+# Environment files
+.env
+.env.local
+
+# OS
+.DS_Store
+thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node
+node_modules/
+
+# Docker helper files
+docker-compose.override.yml
+
+# Misc
+debian12-xfce:1.log
+
+# Ignore runtime nohup output from the host-side connect wrapper
+container/nohup-connect.out
+container/*.out
+container/logs/
