@@ -24,7 +24,6 @@ This project assumes you have a running Linux desktop environment (any distribut
 ```sh
 ./install.sh        # detects/installs Docker and GNU Make when possible
 ./install.sh --run  # install then run `make all`
-./install.sh --run  # install then run `make all`
 ```
 
 2) If you already have the tools, build and run the image:
@@ -213,7 +212,9 @@ sudo service docker start
 # To let your user run docker without sudo
 sudo usermod -aG docker $USER
 # then re-login for the group change to take effect
+```
 
+---
 ### Installing a local RDP client (FreeRDP)
 
 If you need an RDP client on your host for `make connect` or local testing, install FreeRDP (xfreerdp) using your platform package manager:
@@ -247,7 +248,7 @@ brew install freerdp
 ```
 
 Windows: use Microsoft Remote Desktop or install FreeRDP builds separately (Chocolatey packages may not be available/complete).
-```
+
 
 ---
 ## Contributing
@@ -258,5 +259,3 @@ Contributions and issues are welcome — open a merge request or issue on the re
 ## License
 
 This project is provided under the MIT License. See the `LICENSE` file for details.
-
-Recommended repository topics: `docker`, `debian`, `xfce`, `rdp`, `xrdp`, `desktop-in-docker`, `gui-testing`.
