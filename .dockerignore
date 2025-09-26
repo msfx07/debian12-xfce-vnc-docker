@@ -13,7 +13,7 @@ yarn.lock
 # Local environment and runtime artifacts
 .env
 debian12-xfce:1.log
-vnc-start.sh.running
+xrdp-start.sh.running
 
 # Don't include CI or local scripts
 *.local

@@ -8,11 +8,10 @@
 
 IMAGE ?= debian12-xfce
 CONTAINER ?= desktop
-PORT ?= 5901
+PORT ?= 3389
 HOSTNAME ?= debian12-xfce
-VNC_PASSWORD ?= secret
 DOCKER ?= docker
-VNC_CLIENT ?= vncviewer
+RDP_CLIENT ?= xfreerdp
 # Build flags: set BUILD_NO_CACHE=1 to pass --no-cache to docker build
 BUILD_NO_CACHE ?= 0
 # SQUASH may require Docker experimental features; set BUILD_SQUASH=1 to pass --squash
@@ -26,18 +25,19 @@ BUILD_SQUASH ?= 0
 .PHONY: install-verify
 
 .PHONY: itest
-itest: ## Integration test: wait for VNC port to be ready on localhost:5901
-	@echo "Waiting for VNC port $(PORT) on localhost..."
+
+itest: ## Integration test: wait for RDP port to be ready on localhost:3389
+	@echo "Waiting for RDP port $(PORT) on localhost..."
 	@tries=0; \
 	while [ $$tries -lt 30 ]; do \
 	  if command -v nc >/dev/null 2>&1; then \
-	    nc -z 127.0.0.1 $(PORT) >/dev/null 2>&1 && { echo "VNC port $(PORT) is reachable after $$tries seconds"; exit 0; } || true; \
+	    nc -z 127.0.0.1 $(PORT) >/dev/null 2>&1 && { echo "RDP port $(PORT) is reachable after $$tries seconds"; exit 0; } || true; \
 	  else \
-	    (</dev/tcp/127.0.0.1/$(PORT)) >/dev/null 2>&1 && { echo "VNC port $(PORT) is reachable after $$tries seconds"; exit 0; } || true; \
+	    (</dev/tcp/127.0.0.1/$(PORT)) >/dev/null 2>&1 && { echo "RDP port $(PORT) is reachable after $$tries seconds"; exit 0; } || true; \
 	  fi; \
 	  tries=$$((tries+1)); sleep 1; \
 	done; \
-	echo "ERROR: VNC port $(PORT) did not become reachable"; exit 2
+		echo "ERROR: RDP port $(PORT) did not become reachable"; exit 2
 
 help: ## Show this help
 	@awk 'BEGIN {FS = "#"} /^[-A-Za-z0-9_]+:.*##/ { printf "%-12s -%s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -46,7 +46,7 @@ build: ## Build the Docker image
 	@echo "Building image $(IMAGE)..."
 		@FLAGS=""; \
 		if [ "$(BUILD_NO_CACHE)" = "1" ]; then FLAGS="$$FLAGS --no-cache"; fi; \
-		if [ "$(BUILD_SQUASH)" = "1" ]; then \ 
+		if [ "$(BUILD_SQUASH)" = "1" ]; then \
 			if $(DOCKER) build --help 2>/dev/null | grep -q "--squash"; then FLAGS="$$FLAGS --squash"; else echo "Warning: docker build does not support --squash on this host; skipping"; fi; \
 		fi; \
 		$(DOCKER) build $$FLAGS -t $(IMAGE) .
@@ -57,18 +57,18 @@ all: build status ## Build the image and show status
 
 start: ## Start the container (will create it if missing). Use this as the single entrypoint to run the container.
 	@echo "Starting container $(CONTAINER) (image: $(IMAGE))..."
-	@PUBLISH=127.0.0.1:$(PORT):5901; \
+	@PUBLISH=127.0.0.1:$(PORT):3389; \
 	exists=`$(DOCKER) ps -a --filter "name=$(CONTAINER)" --format '{{.Names}}' | grep -w $(CONTAINER) || true`; \
-	if [ -z "$$exists" ]; then \
-	  $(DOCKER) run -d -p $$PUBLISH -e VNC_PASSWORD=$(VNC_PASSWORD) --name $(CONTAINER) --hostname $(HOSTNAME) $(IMAGE); \
+	  if [ -z "$$exists" ]; then \
+	  $(DOCKER) run -d -p $$PUBLISH --name $(CONTAINER) --hostname $(HOSTNAME) $(IMAGE); \
 	else \
 	  current_ports=`$(DOCKER) ps -a --filter "name=$(CONTAINER)" --format '{{.Ports}}'`; \
-	  if echo "$$current_ports" | grep -q "127.0.0.1:$(PORT)->5901/tcp"; then \
+ 	  if echo "$$current_ports" | grep -q "127.0.0.1:$(PORT)->3389/tcp"; then \
 	    $(DOCKER) start $(CONTAINER); \
 	  else \
 	    echo "Container $(CONTAINER) exists but is not bound to 127.0.0.1:$(PORT). Recreating with loopback binding..."; \
 	    -$(DOCKER) rm -f $(CONTAINER) >/dev/null 2>&1 || true; \
-	    $(DOCKER) run -d -p $$PUBLISH -e VNC_PASSWORD=$(VNC_PASSWORD) --name $(CONTAINER) --hostname $(HOSTNAME) $(IMAGE); \
+	    $(DOCKER) run -d -p $$PUBLISH --name $(CONTAINER) --hostname $(HOSTNAME) $(IMAGE); \
 	  fi; \
 	fi
 
@@ -90,7 +90,7 @@ rebuild: ## Rebuild image from scratch (stop container, remove image, build)
 	-$(DOCKER) rmi -f $(IMAGE) >/dev/null 2>&1 || true
 		@FLAGS=""; \
 		if [ "$(BUILD_NO_CACHE)" = "1" ]; then FLAGS="$$FLAGS --no-cache"; fi; \
-		if [ "$(BUILD_SQUASH)" = "1" ]; then \ 
+		if [ "$(BUILD_SQUASH)" = "1" ]; then \
 			if $(DOCKER) build --help 2>/dev/null | grep -q "--squash"; then FLAGS="$$FLAGS --squash"; else echo "Warning: docker build does not support --squash on this host; skipping"; fi; \
 		fi; \
 		$(DOCKER) build $$FLAGS -t $(IMAGE) .
@@ -102,13 +102,12 @@ exec: ## Exec a shell in the running container: make exec SHELL=/bin/bash
 	@SHELL_BIN=${SHELL:-/bin/bash}; \
 	$(DOCKER) exec -it $(CONTAINER) $$SHELL_BIN
 
-connect: ## Launch a VNC client to connect to the container (wrapper script)
+connect: ## Launch an RDP client to connect to the container (wrapper script)
 	@chmod +x ./container/scripts/connect.sh || true
-	# Prefer connecting without a password by default (container often runs no-auth)
-	@# Launch the client in the background using nohup so make exits immediately.
-	@CLIENT_NO_PASS=1 nohup ./container/scripts/connect.sh $(PORT) > ./container/nohup-connect.out 2>&1 & \
+	# Usage: make connect RES=1920x1080 USER=admin PASS=pw123 RDP_CLIENT=xfreerdp CLIENT_NO_PASS=0
+	@nohup env RDP_CLIENT="$(RDP_CLIENT)" CLIENT_NO_PASS="$(CLIENT_NO_PASS)" RES="$(RES)" USER="$(USER)" PASS="$(PASS)" ./container/scripts/connect.sh $(PORT) > ./container/nohup-connect.out 2>&1 & \
 	pid=$$!; sleep 0.05; \
-	echo "Started VNC client (background) with pid $$pid; logs: ./container/nohup-connect.out"
+	echo "Started RDP client (background) with pid $$pid; logs: ./container/nohup-connect.out"
 
 status: ## Show image and container status for $(IMAGE) / $(CONTAINER)
 	@echo "Checking image '$(IMAGE)'..."; \

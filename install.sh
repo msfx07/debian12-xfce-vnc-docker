@@ -1,70 +1,130 @@
 #!/usr/bin/env sh
 # install.sh - ensure Docker and GNU Make are installed (best-effort, per-distro)
-#
-# Notes:
-# - This script performs package installation and may invoke privileged operations (using sudo).
-#   You will typically need to run this as a user with sudo privileges or be prepared to enter
-#   your password when prompted. Continuous integration environments should provide the
-#   necessary permissions or run the installer in an appropriate environment.
-# - On macOS the script installs Docker Desktop via Homebrew Cask when possible, but Docker
-#   Desktop must be started manually by the user after installation (or the service started)
-#   before the Docker daemon is available to run containers.
-set -eu
 
-# Color and emoji helpers (fall back to plain text if not a TTY or NO_COLOR is set)
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  RED='\033[0;31m'
-  GREEN='\033[0;32m'
-  YELLOW='\033[0;33m'
-  BLUE='\033[0;34m'
-  BOLD='\033[1m'
-  RESET='\033[0m'
-else
-  RED=''
-  GREEN=''
-  YELLOW=''
-  BLUE=''
-  BOLD=''
-  RESET=''
-fi
-
-ICON_INFO="ℹ️"
-ICON_OK="✅"
-ICON_WARN="⚠️"
-ICON_ERROR="❌"
-ICON_DOCKER="🐳"
-ICON_MAKE="🛠️"
-
-log() { printf "%s\n" "$*"; }
-info() { printf "%s %b%s%b\n" "$ICON_INFO" "$BOLD$BLUE" "$*" "$RESET" 1>&2; }
-success() { printf "%s %b%s%b\n" "$ICON_OK" "$BOLD$GREEN" "$*" "$RESET" 1>&2; }
-warn() { printf "%s %b%s%b\n" "$ICON_WARN" "$BOLD$YELLOW" "$*" "$RESET" 1>&2; }
-error() { printf "%s %b%s%b\n" "$ICON_ERROR" "$BOLD$RED" "$*" "$RESET" 1>&2; }
-
-usage() {
-  cat <<EOF
-Usage: $0 [--run|-r] [--yes|-y|--yes-to-all] [--help]
-
-This script will:
-  1) detect your OS package manager
-  2) ensure Docker is installed (attempts to install via package manager if missing)
-  3) ensure GNU Make is installed (attempts to install if missing)
-
-Use --run to invoke 'make all' after successful installs.
-Use --yes or --yes-to-all to run non-interactively (answer 'yes' to prompts).
-EOF
-}
-
+# Minimal arg parsing: support --run, --yes, and --check-rdp (validate-only)
 NEED_RUN=0
 YES_ALL=0
+CHECK_RDP_ONLY=0
+
+# Minimal logging helpers used by this script. Keep these intentionally small so
+# the script runs under /bin/sh (dash) without requiring external tooling.
+ICON_DOCKER="[docker]"
+ICON_MAKE="[make]"
+info() { printf "info: %s\n" "$*"; }
+warn() { printf "warn: %s\n" "$*" 1>&2; }
+error() { printf "error: %s\n" "$*" 1>&2; }
+success() { printf "success: %s\n" "$*"; }
+usage() { printf "Usage: %s [--run|-r] [--yes|-y] [--check-rdp]\n" "$0"; }
 for arg in "$@"; do
   case "$arg" in
     -r|--run) NEED_RUN=1 ;;
     -y|--yes|--yes-to-all) YES_ALL=1 ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown arg: $arg"; usage; exit 2 ;;
+    --check-rdp) CHECK_RDP_ONLY=1 ;;
+    -h|--help) echo "Usage: $0 [--run|-r] [--yes|-y] [--check-rdp]"; exit 0 ;;
+    *) ;;
   esac
 done
+
+# If the user requested only RDP client validation, do that early and exit
+if [ "$CHECK_RDP_ONLY" = "1" ]; then
+  if command -v xfreerdp >/dev/null 2>&1; then
+    echo "xfreerdp found: $(command -v xfreerdp)"
+    exit 0
+  else
+    echo "xfreerdp not found. No RDP client installed." 1>&2
+    exit 2
+  fi
+
+fi
+
+## end of quick arg parsing
+
+  # Detect package manager early so subsequent install checks show the detected
+  # package manager instead of blank values.
+  detect_pkgmgr() {
+    PKG_MGR=unknown
+    if command -v apt-get >/dev/null 2>&1; then
+      PKG_MGR=apt
+    elif command -v dnf >/dev/null 2>&1; then
+      PKG_MGR=dnf
+    elif command -v yum >/dev/null 2>&1; then
+      PKG_MGR=yum
+    elif command -v pacman >/dev/null 2>&1; then
+      PKG_MGR=pacman
+    elif command -v apk >/dev/null 2>&1; then
+      PKG_MGR=apk
+    elif command -v brew >/dev/null 2>&1; then
+      PKG_MGR=brew
+    elif command -v choco >/dev/null 2>&1; then
+      PKG_MGR=choco
+    fi
+    echo "$PKG_MGR"
+  }
+
+  PKG_MGR=$(detect_pkgmgr)
+  info "Detected package manager: $PKG_MGR"
+
+# Ensure a local RDP client is available for connecting to the container (xfreerdp/rdesktop/remmina)
+install_rdp_client() {
+  # Prefer FreeRDP (xfreerdp). Fail fast if install fails.
+  if command -v xfreerdp >/dev/null 2>&1; then
+    success "xfreerdp already present: $(command -v xfreerdp)"
+    return 0
+  fi
+
+  warn "xfreerdp not found — attempting to install via $PKG_MGR (will fail on error)."
+  case "$PKG_MGR" in
+    apt)
+      info "Installing freerdp2-x11 via apt..."
+      sudo apt-get update || { error "apt-get update failed"; return 1; }
+      sudo apt-get install -y freerdp2-x11 || { error "apt-get install freerdp2-x11 failed"; return 1; }
+      ;;
+    dnf)
+      info "Installing freerdp via dnf..."
+      sudo dnf install -y freerdp || { error "dnf install freerdp failed"; return 1; }
+      ;;
+    yum)
+      info "Installing freerdp via yum..."
+      sudo yum install -y freerdp || { error "yum install freerdp failed"; return 1; }
+      ;;
+    pacman)
+      info "Installing freerdp via pacman..."
+      sudo pacman -Sy --noconfirm freerdp || { error "pacman install freerdp failed"; return 1; }
+      ;;
+    apk)
+      info "Installing freerdp via apk..."
+      sudo apk add freerdp || { error "apk add freerdp failed"; return 1; }
+      ;;
+    brew)
+      info "Installing freerdp via Homebrew (macOS)..."
+      brew install freerdp || { error "brew install freerdp failed"; return 1; }
+      ;;
+    choco)
+      error "Automatic installation on Windows via Chocolatey is not supported by this script; please install FreeRDP manually."
+      return 1
+      ;;
+    *)
+      error "No supported package manager detected for installing freerdp. Please install freerdp manually."
+      return 1
+      ;;
+  esac
+
+  # Verify installation
+  if command -v xfreerdp >/dev/null 2>&1; then
+    success "xfreerdp installed: $(command -v xfreerdp)"
+    return 0
+  else
+    error "xfreerdp still not found after install attempt"
+    return 2
+  fi
+}
+
+info "==> Ensuring an RDP client (xfreerdp/rdesktop/remmina) is installed (optional for local tests)"
+if install_rdp_client; then
+  success "RDP client available"
+else
+  warn "RDP client not available after attempted install; use your platform package manager to install freerdp/rdesktop/remmina for local testing."
+fi
 
 confirm() {
   # confirm prompt; returns 0 for yes, 1 for no
@@ -83,28 +143,6 @@ confirm() {
   esac
 }
 
-detect_pkgmgr() {
-  PKG_MGR=unknown
-  if command -v apt-get >/dev/null 2>&1; then
-    PKG_MGR=apt
-  elif command -v dnf >/dev/null 2>&1; then
-    PKG_MGR=dnf
-  elif command -v yum >/dev/null 2>&1; then
-    PKG_MGR=yum
-  elif command -v pacman >/dev/null 2>&1; then
-    PKG_MGR=pacman
-  elif command -v apk >/dev/null 2>&1; then
-    PKG_MGR=apk
-  elif command -v brew >/dev/null 2>&1; then
-    PKG_MGR=brew
-  elif command -v choco >/dev/null 2>&1; then
-    PKG_MGR=choco
-  fi
-  echo "$PKG_MGR"
-}
-
-PKG_MGR=$(detect_pkgmgr)
-info "Detected package manager: $PKG_MGR"
 
 install_docker() {
   if command -v docker >/dev/null 2>&1; then
@@ -267,67 +305,6 @@ if install_make; then
 else
   error "GNU Make not available after attempted install. Exiting."
   exit 3
-fi
-
-# Install TigerVNC (viewer/server tools) if missing. Useful for local integration tests
-install_tigervnc() {
-  # Quick check for common vnc binaries
-  if command -v Xtigervnc >/dev/null 2>&1 || command -v Xvnc >/dev/null 2>&1 || command -v vncserver >/dev/null 2>&1; then
-    success "TigerVNC (or compatible VNC server) already present: $(command -v Xtigervnc || command -v Xvnc || command -v vncserver)"
-    return 0
-  fi
-  warn "TigerVNC not found   attempting to install via $PKG_MGR (best-effort)."
-  case "$PKG_MGR" in
-    apt)
-      info "Installing TigerVNC packages via apt..."
-      sudo apt-get update || true
-      sudo apt-get install -y tigervnc-standalone-server tigervnc-common tigervnc-tools || true
-      ;;
-    dnf)
-      info "Installing TigerVNC via dnf..."
-      sudo dnf install -y tigervnc-server tigervnc || true
-      ;;
-    yum)
-      info "Installing TigerVNC via yum..."
-      sudo yum install -y tigervnc-server tigervnc || true
-      ;;
-    pacman)
-      info "Installing TigerVNC via pacman..."
-      sudo pacman -Sy --noconfirm tigervnc || true
-      ;;
-    apk)
-      info "Installing TigerVNC via apk..."
-      sudo apk add tigervnc || true
-      ;;
-    brew)
-      info "Installing TigerVNC via Homebrew..."
-      brew install tigervnc || true
-      ;;
-    choco)
-      info "Installing TigerVNC via Chocolatey..."
-      choco install tigervnc -y || true
-      ;;
-    *)
-      warn "No supported package manager detected for installing TigerVNC. Please install tigervnc manually."
-      return 1
-      ;;
-  esac
-
-  sleep 1
-  if command -v Xtigervnc >/dev/null 2>&1 || command -v Xvnc >/dev/null 2>&1 || command -v vncserver >/dev/null 2>&1; then
-    success "TigerVNC installed: $(command -v Xtigervnc || command -v Xvnc || command -v vncserver)"
-    return 0
-  else
-    warn "TigerVNC installation finished but no vncserver binary found in PATH."
-    return 2
-  fi
-}
-
-info "==> Ensuring TigerVNC is installed (optional for local tests)"
-if install_tigervnc; then
-  success "TigerVNC available"
-else
-  warn "TigerVNC not available after attempted install; some local tests or helpers may not run as expected."
 fi
 
 if [ "$NEED_RUN" -eq 1 ]; then
