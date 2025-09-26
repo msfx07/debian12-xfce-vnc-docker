@@ -1,9 +1,8 @@
 # debian-xfce-docker
 
-Lightweight Debian 12 + XFCE Docker image with TigerVNC — run a local desktop for testing, demos, and headless GUI tasks.
+Lightweight Debian 12 + XFCE Docker image with xrdp — run a local desktop via RDP for testing, demos, and headless GUI tasks.
 
-This repository packages a compact Debian 12 desktop (XFCE) inside a Docker image and exposes the session via TigerVNC. It's designed for quick local GUI testing, demos, and lightweight CI invocations where a graphical environment is needed.
-
+This repository packages a compact Debian 12 desktop (XFCE) inside a Docker image and exposes the session via xrdp (RDP). It's designed for quick local GUI testing, demos, and lightweight CI invocations where a graphical environment is needed.
 [![Docker Build](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
@@ -13,23 +12,56 @@ This repository packages a compact Debian 12 desktop (XFCE) inside a Docker imag
 This project assumes you have a running Linux desktop environment (any distribution) and that you're testing or demoing a GUI inside Docker. The primary use cases are local development, quick demos, and CI-friendly GUI tests on a Linux host.
 
 - Host requirements: Docker and GNU Make (the included `install.sh` can attempt to install them on many distributions but typically requires `sudo`).
-- A VNC viewer on the client machine to connect to the container (e.g. TigerVNC viewer, Remmina, or any VNC client).
-- The repository binds the VNC server to localhost by default; this is intended for local testing. If you run on a remote host, secure the VNC connection (set `VNC_PASSWORD`, use SSH tunnel, or VPN).
+- An RDP client on the client machine to connect to the container (e.g. FreeRDP/xfreerdp, Remmina, or Microsoft Remote Desktop).
+- The repository binds the RDP server to localhost by default; this is intended for local testing. If you run on a remote host, secure the connection (set an appropriate password, use an SSH tunnel, or VPN).
 
 ---
 
 ## Quick start (install Docker + make, then build)
 
-1) If you don't already have Docker and GNU Make, use the bundled helper. It will try to detect and install what's missing (Docker, GNU Make, and optionally TigerVNC for local VNC testing):
+1) If you don't already have Docker and GNU Make, use the bundled helper. It will try to detect and install what's missing (Docker, GNU Make, and optionally xrdp for local RDP testing):
 
 ```sh
 ./install.sh        # detects/installs Docker and GNU Make when possible
+./install.sh --run  # install then run `make all`
 ./install.sh --run  # install then run `make all`
 ```
 
 2) If you already have the tools, build and run the image:
 
 ```sh
+Common resolutions
+------------------
+
+Here are common WIDTHxHEIGHT values you can pass via `RES=` to `make connect`.
+Pick one that matches your display or testing target. The helper normalizes `1920X1080` to `1920x1080` automatically.
+
+- `800x600`   — small / legacy (SVGA)
+- `1024x768`  — common legacy desktop (XGA)
+- `1280x720`  — 720p (HD)
+- `1280x800`  — WXGA (some laptops)
+- `1366x768`  — common laptop resolution (HD)
+- `1440x900`  — WXGA+
+- `1600x900`  — HD+
+- `1680x1050` — WSXGA+
+- `1920x1080` — 1080p (Full HD) — default target used by the container
+- `1920x1200` — WUXGA
+- `2560x1440` — 1440p (QHD)
+- `3840x2160` — 4K (UHD) — may need more CPU/GPU and a capable client
+
+Examples:
+
+```sh
+# connect at 1280x720 (720p)
+make connect RES=1280x720 USER=admin PASS=pPassword123!
+
+# connect at 1366x768 (typical laptop)
+make connect RES=1366x768 USER=admin PASS=pPassword123!
+
+# connect at 4K (if your client and container support it)
+make connect RES=3840x2160 USER=admin PASS=pPassword123!
+```
+
 make all            # builds the Docker image and shows status
 ```
 
@@ -52,7 +84,38 @@ If you prefer to run interactively (see output and confirm prompts):
 ./install.sh               # detect/install interactively
 make all                   # build the image and show status
 make start                 # start the container
-make connect               # open a local VNC viewer (logs to ./container/nohup-connect.out)
+make connect               # open a local RDP client (logs to ./container/nohup-connect.out)
+
+Make connect with parameters
+----------------------------
+
+The `make connect` target now supports passing screen resolution and credentials. Provide parameters on the make command line and they will be forwarded to the host RDP client wrapper (`container/scripts/connect.sh`).
+
+Usage:
+
+```sh
+# Basic: background-launch default client (xfreerdp) and no password
+make connect
+
+# Specify resolution, user and password (background mode)
+make connect RES=1920x1080 USER=admin PASS=pPassword123!
+
+# Use an uppercase X in RES (1920X1080) — it's normalized automatically
+make connect RES=1920X1080 USER=admin PASS=pPassword123!
+
+# Choose a different client or force a no-password connection
+make connect RDP_CLIENT=rdesktop CLIENT_NO_PASS=1
+
+# Run in foreground (for debugging) — set FOREGROUND=1 to run client in the foreground
+make connect FOREGROUND=1 RES=1920x1080 USER=admin PASS=pPassword123!
+```
+
+Notes:
+
+- The `RES` value should be WIDTHxHEIGHT (e.g. `1920x1080`). The script will normalize `1920X1080`.
+- The Make target exports these environment variables for the helper script. The helper translates them for `xfreerdp` and `rdesktop`.
+- By default, the command runs the client in the background and logs to `./container/nohup-connect.out`. To see client output interactively, run with `FOREGROUND=1` (I can add this if you want it to act differently by default).
+- If no client is available the helper will print install hints and try to open an RDP URL via `xdg-open` or `remmina`.
 ```
 
 Notes:
@@ -64,15 +127,15 @@ Notes:
 
 - `Dockerfile` — builds the Debian + XFCE image used by `make build`.
 - `Makefile` — convenient targets (build, start, stop, status, connect, itest, clean-logs, etc.).
-- `install.sh` — helper that detects and attempts to install Docker and GNU Make when missing. It also attempts to install TigerVNC (server/viewer) packages when a VNC client/server is not present, which is useful for local integration tests. The script prints colored, emoji-enhanced status messages when run in a terminal; set `NO_COLOR=1` to disable color/emoji output.
+  - `install.sh` — helper that detects and attempts to install Docker and GNU Make when missing. It also attempts to install xrdp packages when an RDP client/server is not present, which is useful for local integration tests. The script prints colored, emoji-enhanced status messages when run in a terminal; set `NO_COLOR=1` to disable color/emoji output.
 - `container/` — runtime files copied into the image and host helpers:
   - `entrypoint.sh` — image entrypoint that starts supervisord and services
-  - `vnc-start.sh` — prepares VNC password and launches the VNC server
+  - `xrdp-start.sh` — wrapper that launches xrdp and sesman in the container
   - `supervisord.conf` — supervisord config for services
   - `xstartup` — XFCE session startup script
   - `nohup-connect.out` — host-side log produced by `make connect` (ignored by git)
   - `scripts/` — host-side helpers:
-    - `connect.sh` — launches a local VNC client to connect to the container
+  - `connect.sh` — launches a local RDP client to connect to the container
     - `clean-logs.sh` — rotate/cleanup `container/*.out` logs
 
 ---
@@ -84,11 +147,23 @@ Notes:
 make build
 ```
 
-- Start the container (binds VNC to localhost by default):
+- Start the container (binds RDP to localhost by default):
 
 ```sh
 make start
 ```
+
+Retrieve generated password
+---------------------------
+
+If you didn't supply a password via `XRDP_PASSWORD` or a mounted secret, the container entrypoint prints or writes the generated password to the container logs or to the mounted secrets path. To quickly inspect the last 200 log lines (and locate the generated password), run:
+
+```sh
+docker logs desktop --tail 200 || true
+```
+
+The `|| true` ensures the command exits successfully in scripts even if `docker logs` exits non-zero. If you mounted a file for the password (for example `/run/secrets/rdp_password`), prefer reading that file on the host instead of parsing logs.
+
 
 - Quick checks and helpers:
 
@@ -103,14 +178,17 @@ make clean-logs      # rotate/prune logs (default KEEP=3)
 
 Important security note
 
-- By default the VNC port is bound to `127.0.0.1:$(PORT)` so the desktop isn't exposed publicly. This repository defaults to VNC without a password for convenience (the image sets `VNC_NO_PASSWORD=1`). That mode is convenient for local development and CI, but is insecure if exposed to untrusted networks.
+- By default the RDP port is bound to `127.0.0.1:$(PORT)` so the desktop isn't exposed publicly. The image exposes RDP on port $(PORT) and the container's default configuration is intended for local development and CI; if you run on a remote host, secure the service (use firewall rules, SSH tunnels, or configure xrdp authentication).
 
-- If you plan to publish this repository, run on a remote host, or otherwise expose the service, set a `VNC_PASSWORD`, bind the port to localhost only, or tunnel VNC over SSH/VPN. See `Makefile` and `container/vnc-start.sh` for configuration options.
+- If you plan to publish this repository, run on a remote host, or otherwise expose the service, configure xrdp authentication and firewall rules accordingly. See `Makefile` and `container/xrdp-start.sh` for configuration options.
+- By default the RDP port is bound to `127.0.0.1:$(PORT)` so the desktop isn't exposed publicly. The image exposes RDP on port $(PORT) and the container's default configuration is intended for local development and CI; if you run on a remote host, secure the service (use firewall rules, SSH tunnels, or configure xrdp authentication).
+
+- If you plan to publish this repository, run on a remote host, or otherwise expose the service, configure xrdp authentication and firewall rules accordingly. See `Makefile` and `container/xrdp-start.sh` for configuration options.
 
 ---
 ## Running Firefox
 
-Firefox ESR comes preinstalled. The simplest way to use it is from inside XFCE (via VNC): start the container, connect a viewer, and launch Firefox from the desktop menu or a terminal (`firefox-esr`).
+Firefox ESR comes preinstalled. The simplest way to use it is from inside XFCE (via RDP): start the container, connect a client, and launch Firefox from the desktop menu or a terminal (`firefox-esr`).
 
 If you prefer to start it from a shell in the container, use `docker exec` to get a shell in the running container and run `firefox-esr` — note that this approach depends on a DISPLAY/DBUS environment and is mainly useful for quick debugging.
 
@@ -135,6 +213,40 @@ sudo service docker start
 # To let your user run docker without sudo
 sudo usermod -aG docker $USER
 # then re-login for the group change to take effect
+
+### Installing a local RDP client (FreeRDP)
+
+If you need an RDP client on your host for `make connect` or local testing, install FreeRDP (xfreerdp) using your platform package manager:
+
+Debian/Ubuntu:
+```sh
+sudo apt update
+sudo apt install -y freerdp2-x11
+```
+
+Fedora/CentOS (dnf/yum):
+```sh
+sudo dnf install -y freerdp
+# or on older yum-based systems:
+sudo yum install -y freerdp
+```
+
+Arch Linux:
+```sh
+sudo pacman -Sy --noconfirm freerdp
+```
+
+Alpine:
+```sh
+sudo apk add freerdp
+```
+
+macOS (Homebrew):
+```sh
+brew install freerdp
+```
+
+Windows: use Microsoft Remote Desktop or install FreeRDP builds separately (Chocolatey packages may not be available/complete).
 ```
 
 ---
@@ -147,4 +259,4 @@ Contributions and issues are welcome — open a merge request or issue on the re
 
 This project is provided under the MIT License. See the `LICENSE` file for details.
 
-Recommended repository topics: `docker`, `debian`, `xfce`, `vnc`, `tigervnc`, `desktop-in-docker`, `gui-testing`.
+Recommended repository topics: `docker`, `debian`, `xfce`, `rdp`, `xrdp`, `desktop-in-docker`, `gui-testing`.
