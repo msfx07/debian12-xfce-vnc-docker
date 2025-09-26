@@ -115,11 +115,7 @@ Notes:
 - The Make target exports these environment variables for the helper script. The helper translates them for `xfreerdp` and `rdesktop`.
 - By default, the command runs the client in the background and logs to `./container/nohup-connect.out`. To see client output interactively, run with `FOREGROUND=1` (I can add this if you want it to act differently by default).
 - If no client is available the helper will print install hints and try to open an RDP URL via `xdg-open` or `remmina`.
-```
 
-Notes:
-- Some install steps require `sudo` (package installs). If Docker is installed but the daemon isn't running, start it with `sudo systemctl start docker` or `sudo service docker start`.
-- To disable colored/emoji output from `install.sh`, set `NO_COLOR=1` before running it.
 
 ---
 ## What you'll find here
