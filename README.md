@@ -103,13 +103,14 @@ Adds compression, exit-on-forward-failure, and runs in background (-f -N).
 ```sh
 ssh -f -N -C -o ExitOnForwardFailure=yes -L 3389:localhost:3389 user@remote.host
 ```
-Flags explained
 
--f : put ssh into background after authentication (run in background).
--N : do not run a remote shell/command (useful for port forwarding only).
--C : enable compression on the SSH connection.
--o ExitOnForwardFailure=yes : make ssh exit if port forwarding cannot be established (fail fast).
--L 33389:localhost:3389 : set up a local port forward — bind local port 33389 and forward connections to localhost:3389 on the remote side.
+Flags explained:
+
+- -f : put ssh into background after authentication (run in background).
+- -N : do not run a remote shell/command (useful for port forwarding only).
+- -C : enable compression on the SSH connection.
+- -o ExitOnForwardFailure=yes : make ssh exit if port forwarding cannot be established (fail fast).
+- -L 33389:localhost:3389 : set up a local port forward — bind local port 33389 and forward connections to localhost:3389 on the remote side.
 user@remote.host : replace with your SSH username and remote host (or IP).
 
 
