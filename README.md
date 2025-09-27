@@ -50,8 +50,8 @@ Usage:
 # Specify resolution, user and password (background mode)
 make connect RES=1920x1080 USER=admin PASS=Retrieve_Generated_Password
 
-# Use an uppercase X in RES (1920X1080) — it's normalized automatically
-make connect RES=1920X1080 USER=admin PASS=Retrieve_Generated_Password
+# Use common laptop resolution (HD)
+make connect RES=1366x768 USER=admin PASS=Retrieve_Generated_Password
 ```
 
 Retrieve generated password
@@ -91,6 +91,26 @@ Notes:
 - The Make target exports these environment variables for the helper script. The helper translates them for `xfreerdp` and `rdesktop`.
 - By default, the command runs the client in the background and logs to `./container/nohup-connect.out`. To see client output interactively, run with `FOREGROUND=1` (I can add this if you want it to act differently by default).
 - If no client is available the helper will print install hints and try to open an RDP URL via `xdg-open` or `remmina`.
+
+---
+### Connect via SSH tunnel (Advanced)
+
+Use an SSH tunnel to securely forward the remote container’s RDP port to your local machine and then connect your local RDP client to localhost. Replace user@remote.host and ports as needed; prefer mounting a secret file (/run/secrets/rdp_password) over passing passwords via environment variables. Example (background, fail-fast if forwarding cannot be established):
+
+Run it in the background (no remote shell)
+
+Adds compression, exit-on-forward-failure, and runs in background (-f -N).
+```sh
+ssh -f -N -C -o ExitOnForwardFailure=yes -L 3389:localhost:3389 user@remote.host
+```
+Flags explained
+
+-f : put ssh into background after authentication (run in background).
+-N : do not run a remote shell/command (useful for port forwarding only).
+-C : enable compression on the SSH connection.
+-o ExitOnForwardFailure=yes : make ssh exit if port forwarding cannot be established (fail fast).
+-L 33389:localhost:3389 : set up a local port forward — bind local port 33389 and forward connections to localhost:3389 on the remote side.
+user@remote.host : replace with your SSH username and remote host (or IP).
 
 
 ---
