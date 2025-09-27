@@ -21,7 +21,7 @@ This project assumes you have a running Linux desktop environment (any distribut
 Clone, and install dependencies:
 
 ```sh
-git clone https://github.com/msfx07/debian12-xfce-vnc-docker.git debian-xfce
+git clone https://github.com/msfx07/debian12-xfce-docker.git debian-xfce
 cd debian-xfce
 ./install.sh        # detects/installs Docker and GNU Make when possible
 ./install.sh --run  # install then run `make all`
@@ -35,7 +35,7 @@ If you prefer to run interactively (see output and confirm prompts):
 ```sh
 make build           # build the image and show status
 make start           # start the container
-make itest           # verify VNC server is reachable
+make itest           # verify RDP server is reachable
 make status          # display image and container info
 ```
 
@@ -133,7 +133,7 @@ user@remote.host : replace with your SSH username and remote host (or IP).
 - Quick checks and helpers:
 
 ```sh
-make itest           # verify VNC server is reachable
+make itest           # verify RDP server is reachable
 make status          # display image and container info
 make clean           # stop and delete container and remove image
 make clean-logs      # rotate/prune logs (default KEEP=3)
