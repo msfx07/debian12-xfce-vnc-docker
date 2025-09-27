@@ -16,19 +16,56 @@ This project assumes you have a running Linux desktop environment (any distribut
 - The repository binds the RDP server to localhost by default; this is intended for local testing. If you run on a remote host, secure the connection (set an appropriate password, use an SSH tunnel, or VPN).
 
 ---
-
 ## Quick start (install Docker + make, then build)
 
-1) If you don't already have Docker and GNU Make, use the bundled helper. It will try to detect and install what's missing (Docker, GNU Make, and optionally xrdp for local RDP testing):
+Clone, and install dependencies:
 
 ```sh
+git clone https://github.com/msfx07/debian12-xfce-vnc-docker.git debian-xfce
+cd debian-xfce
 ./install.sh        # detects/installs Docker and GNU Make when possible
 ./install.sh --run  # install then run `make all`
 ```
 
-2) If you already have the tools, build and run the image:
+---
+## Try it — quick commands
+
+If you prefer to run interactively (see output and confirm prompts):
 
 ```sh
+make build           # build the image and show status
+make start           # start the container
+make itest           # verify VNC server is reachable
+make status          # display image and container info
+```
+
+---
+### Make connect with parameters
+
+The `make connect` target now supports passing screen resolution and credentials. Provide parameters on the make command line and they will be forwarded to the host RDP client wrapper (`container/scripts/connect.sh`).
+
+Usage:
+
+```sh
+# Specify resolution, user and password (background mode)
+make connect RES=1920x1080 USER=admin PASS=Retrieve_Generated_Password
+
+# Use an uppercase X in RES (1920X1080) — it's normalized automatically
+make connect RES=1920X1080 USER=admin PASS=Retrieve_Generated_Password
+```
+
+Retrieve generated password
+---------------------------
+
+If you didn't supply a password via `XRDP_PASSWORD` or a mounted secret, the container entrypoint prints or writes the generated password to the container logs or to the mounted secrets path. To quickly inspect the last 200 log lines (and locate the generated password), run:
+
+```sh
+docker logs desktop --tail 200 || true
+```
+
+The `|| true` ensures the command exits successfully in scripts even if `docker logs` exits non-zero. If you mounted a file for the password (for example `/run/secrets/rdp_password`), prefer reading that file on the host instead of parsing logs.
+
+
 Common resolutions
 ------------------
 
@@ -47,67 +84,6 @@ Pick one that matches your display or testing target. The helper normalizes `192
 - `1920x1200` — WUXGA
 - `2560x1440` — 1440p (QHD)
 - `3840x2160` — 4K (UHD) — may need more CPU/GPU and a capable client
-
-Examples:
-
-```sh
-# connect at 1280x720 (720p)
-make connect RES=1280x720 USER=admin PASS=pPassword123!
-
-# connect at 1366x768 (typical laptop)
-make connect RES=1366x768 USER=admin PASS=pPassword123!
-
-# connect at 4K (if your client and container support it)
-make connect RES=3840x2160 USER=admin PASS=pPassword123!
-```
-
-make all            # builds the Docker image and shows status
-```
-
-Tip: `make all` runs `make build` then `make status`.
-
----
-## Try it — quick commands
-
-Clone, install dependencies, build and run (non-interactive):
-
-```sh
-# clone the repo, then:
-cd debian-xfce
-./install.sh --yes --run   # attempts to install Docker + Make, then runs `make all`
-```
-
-If you prefer to run interactively (see output and confirm prompts):
-
-```sh
-./install.sh               # detect/install interactively
-make all                   # build the image and show status
-make start                 # start the container
-make connect               # open a local RDP client (logs to ./container/nohup-connect.out)
-
-Make connect with parameters
-----------------------------
-
-The `make connect` target now supports passing screen resolution and credentials. Provide parameters on the make command line and they will be forwarded to the host RDP client wrapper (`container/scripts/connect.sh`).
-
-Usage:
-
-```sh
-# Basic: background-launch default client (xfreerdp) and no password
-make connect
-
-# Specify resolution, user and password (background mode)
-make connect RES=1920x1080 USER=admin PASS=pPassword123!
-
-# Use an uppercase X in RES (1920X1080) — it's normalized automatically
-make connect RES=1920X1080 USER=admin PASS=pPassword123!
-
-# Choose a different client or force a no-password connection
-make connect RDP_CLIENT=rdesktop CLIENT_NO_PASS=1
-
-# Run in foreground (for debugging) — set FOREGROUND=1 to run client in the foreground
-make connect FOREGROUND=1 RES=1920x1080 USER=admin PASS=pPassword123!
-```
 
 Notes:
 
@@ -133,85 +109,17 @@ Notes:
   - `connect.sh` — launches a local RDP client to connect to the container
     - `clean-logs.sh` — rotate/cleanup `container/*.out` logs
 
----
-## How to use (short)
-
-- Build the image:
-
-```sh
-make build
-```
-
-- Start the container (binds RDP to localhost by default):
-
-```sh
-make start
-```
-
-Retrieve generated password
----------------------------
-
-If you didn't supply a password via `XRDP_PASSWORD` or a mounted secret, the container entrypoint prints or writes the generated password to the container logs or to the mounted secrets path. To quickly inspect the last 200 log lines (and locate the generated password), run:
-
-```sh
-docker logs desktop --tail 200 || true
-```
-
-The `|| true` ensures the command exits successfully in scripts even if `docker logs` exits non-zero. If you mounted a file for the password (for example `/run/secrets/rdp_password`), prefer reading that file on the host instead of parsing logs.
-
-
 - Quick checks and helpers:
 
 ```sh
 make itest           # verify VNC server is reachable
-make connect         # open a local viewer (logs to ./container/nohup-connect.out)
+make status          # display image and container info
+make clean           # stop and delete container and remove image
 make clean-logs      # rotate/prune logs (default KEEP=3)
 ```
 
 ---
-## Notes & security
-
-Important security note
-
-- By default the RDP port is bound to `127.0.0.1:$(PORT)` so the desktop isn't exposed publicly. The image exposes RDP on port $(PORT) and the container's default configuration is intended for local development and CI; if you run on a remote host, secure the service (use firewall rules, SSH tunnels, or configure xrdp authentication).
-
-- If you plan to publish this repository, run on a remote host, or otherwise expose the service, configure xrdp authentication and firewall rules accordingly. See `Makefile` and `container/xrdp-start.sh` for configuration options.
-- By default the RDP port is bound to `127.0.0.1:$(PORT)` so the desktop isn't exposed publicly. The image exposes RDP on port $(PORT) and the container's default configuration is intended for local development and CI; if you run on a remote host, secure the service (use firewall rules, SSH tunnels, or configure xrdp authentication).
-
-- If you plan to publish this repository, run on a remote host, or otherwise expose the service, configure xrdp authentication and firewall rules accordingly. See `Makefile` and `container/xrdp-start.sh` for configuration options.
-
----
-## Running Firefox
-
-Firefox ESR comes preinstalled. The simplest way to use it is from inside XFCE (via RDP): start the container, connect a client, and launch Firefox from the desktop menu or a terminal (`firefox-esr`).
-
-If you prefer to start it from a shell in the container, use `docker exec` to get a shell in the running container and run `firefox-esr` — note that this approach depends on a DISPLAY/DBUS environment and is mainly useful for quick debugging.
-
----
-## Installer notes (CI friendly)
-
-The installer can run non-interactively with `--yes` / `-y` (handy in CI):
-
-```sh
-./install.sh --yes --run   # install Docker + make, then run `make all`
-```
-
-If Docker is present but the daemon isn't running, the script will offer to start it interactively. In non-interactive mode it won't start the daemon automatically — you'll need to run one of these manually:
-
-```sh
-# On most Linux systems with systemd
-sudo systemctl start docker
-
-# On older systems
-sudo service docker start
-
-# To let your user run docker without sudo
-sudo usermod -aG docker $USER
-# then re-login for the group change to take effect
-```
-
----
-### Installing a local RDP client (FreeRDP)
+## Installing a local RDP client (FreeRDP)
 
 If you need an RDP client on your host for `make connect` or local testing, install FreeRDP (xfreerdp) using your platform package manager:
 
@@ -245,11 +153,27 @@ brew install freerdp
 
 Windows: use Microsoft Remote Desktop or install FreeRDP builds separately (Chocolatey packages may not be available/complete).
 
-
 ---
-## Contributing
+## Notes & security
 
-Contributions and issues are welcome — open a merge request or issue on the repo. If you add runtime artifacts (logs, caches), add them to `.gitignore`.
+Important security note
+
+- By default the RDP port is bound to `127.0.0.1:$(PORT)` so the desktop isn't exposed publicly and Local Area Network. The image exposes RDP on port $(PORT) and the container's default configuration is intended for local development and CI; if you run on a remote host, secure the service (use firewall rules, SSH tunnels, or configure xrdp authentication).
+
+
+If Docker is present but the daemon isn't running, the script will offer to start it interactively. In non-interactive mode it won't start the daemon automatically — you'll need to run one of these manually:
+
+```sh
+# On most Linux systems with systemd
+sudo systemctl start docker
+
+# On older systems
+sudo service docker start
+
+# To let your user run docker without sudo
+sudo usermod -aG docker $USER
+# then re-login for the group change to take effect
+```
 
 ---
 ## License
